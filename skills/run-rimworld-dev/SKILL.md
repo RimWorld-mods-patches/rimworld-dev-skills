@@ -15,7 +15,7 @@ RW_DEV_ENV="$(python3 "$RW_REPO_ROOT/.shared/rimworld-dev-skills/scripts/dev-env
 ```
 
 Stop if configuration resolution fails. The default app is the current user's
-macOS Steam library; override `RW_RIMWORLD_APP` before resolution for another
+macOS Steam library; export `RW_RIMWORLD_APP` before resolution for another
 install. This workflow is macOS-specific; do not run its process/UI commands on
 another platform without adapting them to the verified executable.
 
@@ -69,6 +69,9 @@ may belong to the user's normal game.
 The API starts after a colony loads, not at the main menu. Use `localhost` (the
 tested macOS listener is IPv6-backed) and bypass proxies. Discover version-specific
 routes with `GET /api/v1/dev/endpoints`:
+
+Export `RW_RIMAPI_BASE` before environment resolution to override the default
+address/port; shell variables alone are not inherited by the Python helper.
 
 ```sh
 curl --noproxy '*' --fail --silent --show-error --max-time 4 "$RW_RIMAPI_BASE/api/v1/game/state"

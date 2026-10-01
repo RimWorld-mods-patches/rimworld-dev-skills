@@ -77,7 +77,7 @@ docker run --rm \
   dotnet run -c Release -- /rw/Assembly-CSharp.dll RimWorld.Building_Door /rw
 ```
 
-Verify `RW_MANAGED` exists first; override `RW_RIMWORLD_APP` before resolving the
+Verify `RW_MANAGED` exists first; export `RW_RIMWORLD_APP` before resolving the
 environment if the game is not in the default macOS Steam library. Arguments are
 `ASSEMBLY TYPE [REFERENCE_DIRECTORY ...]`. For optional mods mount their assembly
 directories read-only and pass them as additional resolver paths. Assembly names
