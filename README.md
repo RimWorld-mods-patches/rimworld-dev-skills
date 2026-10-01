@@ -22,22 +22,26 @@ building, installing, or editing anything.
 
 ## Maintainer workflow
 
-Edit and commit skills in the shared repository, then update each clean mod from
+Edit, commit, and push skills to the shared repository, then update each clean mod from
 its root:
 
 ```sh
-sh .shared/rimworld-dev-skills/scripts/update-subtree.sh ../rimworld-dev-skills
+sh .shared/rimworld-dev-skills/scripts/update-subtree.sh
 ```
 
-Pass the actual checkout path or a published Git URL if not using sibling
-checkouts; a managed worktree need not have the same parent. The source repository
-is not required for users who only consume the pinned snapshot. Subtree updates
-are explicit commits, never automatic changes to every mod.
+The default source is
+`https://github.com/RimWorld-mods-patches/rimworld-dev-skills.git`, branch `main`.
+No sibling checkout or global skill installation is required. For an unpublished
+local change or another source/ref, pass overrides explicitly:
 
-This helper uses the shared repository's `main` branch unless a second argument
-selects another ref. Publish the shared repository separately when remote updates
-are needed; no GitHub URL is assumed. Changes made inside a vendored snapshot
-must be ported to the authoritative repository before synchronizing again.
+```sh
+sh .shared/rimworld-dev-skills/scripts/update-subtree.sh ../rimworld-dev-skills main
+```
+
+A managed worktree need not have the same parent; use the actual source path in
+that case. Subtree updates require a clean checkout and create explicit commits,
+never automatic changes to every mod. Changes inside a vendored snapshot must
+be ported to the authoritative repository before synchronizing again.
 
 ## Validation
 
@@ -61,4 +65,5 @@ pinned shared commit.
 | Fresh-clone and helper verification | In scope |
 | Normal game profiles, saves, installed mods, or game launches | Declined: not needed for distribution |
 | Unrelated skill replacement or feature-branch merging | Declined: outside this migration |
-| Publishing/pushing remote repositories | Deferred until explicitly requested |
+| Publishing shared skills | Published to RimWorld-mods-patches/rimworld-dev-skills |
+| Pushing consumer mod repositories | Deferred until explicitly requested |
