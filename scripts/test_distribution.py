@@ -39,7 +39,7 @@ class DistributionTests(unittest.TestCase):
             git(consumer, "commit", "-m", "Initial mod fixture")
             git(consumer, "subtree", "add", "--prefix=.shared/rimworld-dev-skills",
                 str(source), "main", "--squash")
-            names = ("build-mod", "run-rimworld-dev", "use-rimapi-debug-actions")
+            names = ("build-mod", "run-rimworld-dev", "use-rimapi-debug-actions", "version-bump")
             for agent in (".agents", ".claude"):
                 discovery = consumer / agent / "skills"
                 discovery.mkdir(parents=True)

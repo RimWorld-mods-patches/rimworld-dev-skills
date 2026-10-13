@@ -1,7 +1,7 @@
 # Shared RimWorld development skills
 
-Authoritative workflows for `build-mod`, `run-rimworld-dev`, and
-`use-rimapi-debug-actions`. No mod-specific project, save, event, or package IDs
+Authoritative workflows for `build-mod`, `run-rimworld-dev`,
+`use-rimapi-debug-actions`, and `version-bump`. No mod-specific project, save, event, or package IDs
 belong in these skills. Never embed a concrete username or home-directory path.
 
 ## Distribution
@@ -47,11 +47,13 @@ be ported to the authoritative repository before synchronizing again.
 
 ```sh
 python3 -m unittest discover -s skills/use-rimapi-debug-actions/scripts -p 'test_*.py'
+python3 -m unittest discover -s skills/version-bump/scripts -p 'test_*.py'
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-The API tests use an ephemeral loopback HTTP server, not RimWorld. Consumer
-validation should include an ordinary fresh clone, all six skill links, config
+The API tests use an ephemeral loopback HTTP server, not RimWorld; the version
+guard tests use disposable Git repositories. Consumer
+validation should include an ordinary fresh clone, every skill link, config
 resolution from a nested directory, and the tracked subtree tree matching its
 pinned shared commit.
 
@@ -59,7 +61,8 @@ pinned shared commit.
 
 | Deliverable | Scope |
 | --- | --- |
-| Three shared skills and existing helper programs | In scope |
+| Shared skills and existing helper programs | In scope |
+| Opt-in Claude version guard hook, referenced from consumer settings | In scope |
 | Per-mod configuration and runtime notes | In scope |
 | Subtree snapshots and both agents' discovery links | In scope |
 | Fresh-clone and helper verification | In scope |
