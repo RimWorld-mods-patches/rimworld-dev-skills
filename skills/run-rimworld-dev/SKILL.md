@@ -23,13 +23,34 @@ another platform without adapting them to the verified executable.
 
 All mutable test state belongs under ignored `.runtime/`, never the user's normal
 profile. Do not copy normal user saves. The profile holds disposable `Config/`,
-`Saves/`, and mod data. If absent, explicitly create a developer quick-test colony
+`Saves/`, and mod data. A clone contains the skills, not private runtime
+profiles/saves. Prepare and check them with the setup helper:
+
+```sh
+python3 "$RW_REPO_ROOT/.shared/rimworld-dev-skills/scripts/setup-dev.py"          # report only
+python3 "$RW_REPO_ROOT/.shared/rimworld-dev-skills/scripts/setup-dev.py" --apply  # make changes
+```
+
+It reports the game, Docker, every `baseline_mods` entry, the profile's
+`ModsConfig.xml`/`Prefs.xml` and the baseline save. `--apply` writes the profile
+config from `baseline_mods` (lowercase IDs), links this checkout and missing
+Workshop items into the game's `Mods/` folder as `dev-<packageId>`, and
+downloads GitHub-release mods named in `mod_sources` into `.runtime/mods`. It
+reuses any installed copy of a test mod, repoints only a symlink of this mod that
+targets another checkout, and never replaces a real folder or edits the normal
+profile. Unsubscribed Workshop items are reported with their URL. Run it from the
+checkout you are testing; another worktree's run repoints the mod link to itself.
+Links in `Mods/` are visible to the normal profile too, but stay inactive unless
+enabled there. With Steam running, a linked Workshop item loads twice; launch the
+disposable profile without Steam, as below.
+
+If the baseline save is absent, explicitly create a developer quick-test colony
 with the configured baseline mod order, save the untouched reset point at
-`RW_BASELINE_SAVE`, then stop the game before testing. A clone contains the skills,
-not private runtime profiles/saves. Check instrumentation is installed and enabled
-in `Config/ModsConfig.xml`; a mod present in `Mods/` is not automatically active.
-RIMAPI and its companion are test instrumentation, not shipped mod dependencies.
-Optional-mod tests must restore the configured baseline order afterwards.
+`RW_BASELINE_SAVE`, then stop the game before testing. A mod present in `Mods/`
+is not automatically active; the profile's `ModsConfig.xml` decides. RIMAPI and
+its companion are test instrumentation, not shipped mod dependencies.
+Optional-mod tests must restore the configured baseline order afterwards
+(`setup-dev.py --apply` resets it).
 
 Before building, resetting saves, editing configs, or relaunching, query the exact
 disposable process:

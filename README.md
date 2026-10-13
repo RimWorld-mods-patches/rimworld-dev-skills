@@ -20,6 +20,26 @@ order, and scenario-specific evidence. `scripts/dev-env.py --check` validates th
 configuration against its actual project and About metadata without launching,
 building, installing, or editing anything.
 
+## Setting up a consumer checkout
+
+`scripts/setup-dev.py` prepares the disposable live-test environment that
+`run-rimworld-dev` uses. It reports by default and changes things only with
+`--apply`: the `.runtime/` profile and its `ModsConfig.xml`, `dev-<packageId>`
+links in the game's `Mods/` folder, and GitHub-release test mods downloaded into
+`.runtime/mods`. A consumer names where each non-official baseline mod comes from:
+
+```json
+"mod_sources": {
+  "brrainz.harmony": {"workshop": "2009463077"},
+  "roman.rimapi.debugactions": {"github_release": "RimWorld-mods-patches/rimapi-debug-actions"}
+}
+```
+
+`github_release` takes an optional `"tag"`; without it the latest non-prerelease
+is used, and the release must have exactly one `.zip` asset. Set `GITHUB_TOKEN`
+if the anonymous GitHub API rate limit is hit, and `RW_WORKSHOP_DIR` when the
+game is not inside a Steam library.
+
 ## Maintainer workflow
 
 Edit, commit, and push skills to the shared repository, then update each clean mod from
@@ -50,6 +70,8 @@ python3 -m unittest discover -s skills/use-rimapi-debug-actions/scripts -p 'test
 python3 -m unittest discover -s skills/version-bump/scripts -p 'test_*.py'
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
+
+The setup tests use a fake game folder, Workshop folder and release zip.
 
 The API tests use an ephemeral loopback HTTP server, not RimWorld; the version
 guard tests use disposable Git repositories. Consumer
