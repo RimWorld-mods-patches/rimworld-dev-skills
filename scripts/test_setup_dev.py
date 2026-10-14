@@ -59,6 +59,13 @@ class SetupTests(unittest.TestCase):
         fetch = patch.object(setup_dev, "fetch_release", side_effect=self.fake_fetch)
         self.fetch = fetch.start()
         self.addCleanup(fetch.stop)
+        self.create_baseline = setup_dev.create_baseline
+        baseline = patch.object(setup_dev, "create_baseline", side_effect=self.fake_baseline)
+        self.baseline = baseline.start()
+        self.addCleanup(baseline.stop)
+
+    def fake_baseline(self, values, timeout, log=print):
+        Path(values["RW_BASELINE_SAVE"]).write_text("save")
 
     def fake_fetch(self, repo, tag, dest):
         dest.mkdir(parents=True, exist_ok=True)
@@ -97,13 +104,13 @@ class SetupTests(unittest.TestCase):
                          setup_dev.active_mods(profile / "Config/ModsConfig.xml"))
         self.assertIn("<devMode>True</devMode>", (profile / "Config/Prefs.xml").read_text())
         self.assertTrue((profile / "Saves").is_dir())
-        # Everything but the baseline save is ready.
-        self.assertEqual(1, code)
-        self.assertIn("Fixture-Disposable.rws missing", out)
-        (profile / "Saves/Fixture-Disposable.rws").write_text("save")
-        code, out = self.run_setup()
+        # The baseline save is created last, once everything else is ready.
+        self.assertEqual(0, code, out)
+        self.assertEqual(1, self.baseline.call_count)
+        code, out = self.run_setup("--apply")
         self.assertEqual(0, code, out)
         self.assertEqual(1, self.fetch.call_count)
+        self.assertEqual(1, self.baseline.call_count)
 
     def test_existing_installs_are_reused(self):
         about(self.app / "Mods/Harmony", "brrainz.harmony")
@@ -134,6 +141,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn("subscribe to https://steamcommunity.com/sharedfiles/filedetails/?id=111", out)
         self.assertFalse((self.app / "Mods/dev-brrainz.harmony").exists())
+        self.baseline.assert_not_called()
 
     def test_missing_game_stops_before_changes(self):
         with patch.dict(os.environ, {"RW_RIMWORLD_APP": str(Path(self.temp.name) / "nowhere.app")}):
@@ -141,6 +149,95 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn("not found", out)
         self.assertFalse((self.root / ".runtime").exists())
+
+    def values(self):
+        return setup_dev.dev_env.load(self.root)
+
+    def test_baseline_refuses_when_a_game_already_answers(self):
+        with patch.object(setup_dev, "running", return_value=[]), \
+                patch.object(setup_dev, "api_up", return_value=True), \
+                patch.object(setup_dev.subprocess, "Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "Another game"):
+                self.create_baseline(self.values(), 5, log=lambda _: None)
+        popen.assert_not_called()
+        with patch.object(setup_dev, "running", return_value=[123]), \
+                patch.object(setup_dev.subprocess, "Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "already running"):
+                self.create_baseline(self.values(), 5, log=lambda _: None)
+        popen.assert_not_called()
+
+    def test_baseline_launches_quicktest_saves_and_stops(self):
+        values = self.values()
+        save = Path(values["RW_BASELINE_SAVE"])
+        save.parent.mkdir(parents=True)
+        (save.parent / "autostart.rws").write_text("old")
+
+        class Process:
+            returncode = None
+            stopped = False
+
+            def poll(self):
+                return 0 if self.stopped else None
+
+            def terminate(self):
+                self.stopped = True
+
+            def wait(self, timeout=None):
+                return 0
+
+        process = Process()
+
+        def fake_api(base, path, post=False, timeout=10):
+            self.assertTrue(post)
+            self.assertEqual(setup_dev.SAVE_ROUTE + "Fixture-Disposable", path)
+            save.write_text("saved")
+            return {"success": True, "path": str(save), "tick": 1}
+
+        with patch.object(setup_dev, "running", return_value=[]), \
+                patch.object(setup_dev, "api_up", return_value=False), \
+                patch.object(setup_dev, "map_loaded", return_value=True), \
+                patch.object(setup_dev, "api", side_effect=fake_api), \
+                patch.object(setup_dev.subprocess, "Popen", return_value=process) as popen:
+            self.create_baseline(values, 5, log=lambda _: None)
+        command = popen.call_args.args[0]
+        self.assertEqual(str(self.app / setup_dev.EXECUTABLE), command[0])
+        self.assertIn("-quicktest", command)
+        self.assertIn("-savedatafolder=" + values["RW_PROFILE_DIR"], command)
+        self.assertFalse((save.parent / "autostart.rws").exists())
+        self.assertEqual("saved", save.read_text())
+        self.assertTrue(process.stopped)
+
+    def test_baseline_failure_still_stops_the_game(self):
+
+        class Process:
+            returncode = None
+            stopped = False
+
+            def poll(self):
+                return 0 if self.stopped else None
+
+            def terminate(self):
+                self.stopped = True
+
+            def wait(self, timeout=None):
+                return 0
+
+        process = Process()
+        with patch.object(setup_dev, "running", return_value=[]), \
+                patch.object(setup_dev, "api_up", return_value=False), \
+                patch.object(setup_dev, "map_loaded", return_value=True), \
+                patch.object(setup_dev, "api", return_value={"success": False, "error": "no route"}), \
+                patch.object(setup_dev.subprocess, "Popen", return_value=process):
+            with self.assertRaisesRegex(ValueError, "0.1.2 or later"):
+                self.create_baseline(self.values(), 5, log=lambda _: None)
+        self.assertTrue(process.stopped)
+
+    def test_map_loaded_needs_a_successful_reply_with_maps(self):
+        for reply, loaded in (({"success": True, "data": [{"id": 0}]}, True),
+                              ({"success": True, "data": []}, False),
+                              ({"success": False, "errors": ["Game not loaded"]}, False)):
+            with self.subTest(reply=reply), patch.object(setup_dev, "api", return_value=reply):
+                self.assertEqual(loaded, setup_dev.map_loaded("http://localhost:1"))
 
     def test_unsafe_release_zip_is_rejected(self):
         bad = Path(self.temp.name) / "bad.zip"

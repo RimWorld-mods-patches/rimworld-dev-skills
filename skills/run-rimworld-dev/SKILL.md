@@ -44,9 +44,15 @@ Links in `Mods/` are visible to the normal profile too, but stay inactive unless
 enabled there. With Steam running, a linked Workshop item loads twice; launch the
 disposable profile without Steam, as below.
 
-If the baseline save is absent, explicitly create a developer quick-test colony
-with the configured baseline mod order, save the untouched reset point at
-`RW_BASELINE_SAVE`, then stop the game before testing. A mod present in `Mods/`
+When everything else is ready and the baseline save is absent, `--apply` creates
+it: it refuses while the disposable profile runs or any game answers on the
+RIMAPI port, removes the throwaway `autostart.rws`, launches the profile with
+`-quicktest` (a new Crashlanded colony on a random tile), saves it under the
+`baseline_save` name through the RIMAPI Debug Actions `POST
+/api/v1/debug-actions/save?name=` endpoint (0.1.2 or later), checks the file in
+this profile, and stops the game it started. Without that companion, create a
+developer quick-test colony by hand (main menu **Dev quicktest**), save it as the
+baseline name and stop the game before testing. A mod present in `Mods/`
 is not automatically active; the profile's `ModsConfig.xml` decides. RIMAPI and
 its companion are test instrumentation, not shipped mod dependencies.
 Optional-mod tests must restore the configured baseline order afterwards

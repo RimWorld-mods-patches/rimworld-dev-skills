@@ -4,9 +4,11 @@
 Without --apply it only reports what is ready and what is missing. With --apply
 it creates the isolated profile under .runtime/, writes its ModsConfig.xml from
 baseline_mods, downloads GitHub-release test mods into .runtime/mods and links
-missing mods into the game's Mods folder. It never edits the normal game
-profile, never deletes or replaces a real directory, and never launches the
-game.
+missing mods into the game's Mods folder. When everything else is ready and the
+baseline save is missing, it then launches the disposable profile with
+-quicktest, saves the new colony under the configured name through the RIMAPI
+Debug Actions save endpoint, and stops that game. It never edits the normal game
+profile and never deletes or replaces a real directory.
 """
 
 import argparse
@@ -17,6 +19,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
@@ -28,6 +33,8 @@ _spec.loader.exec_module(dev_env)
 WORKSHOP_APP_ID = "294100"
 WORKSHOP_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id="
 LINK_PREFIX = "dev-"
+EXECUTABLE = "Contents/MacOS/RimWorld by Ludeon Studios"
+SAVE_ROUTE = "/api/v1/debug-actions/save?name="
 PREFS = """<?xml version="1.0" encoding="utf-8"?>
 <PrefsData>
   <runInBackground>True</runInBackground>
@@ -260,14 +267,100 @@ def plan(root, values, config):
     if baseline_save.is_file():
         report.add("ok", "baseline save", baseline_save.name)
     else:
-        report.add("todo", "baseline save", baseline_save.name + " missing; create it as described in the run-rimworld-dev skill")
+        report.add("todo", "baseline save", baseline_save.name + " missing; --apply creates it with a quick-test colony")
     return report, actions
+
+
+def running(profile):
+    """PIDs of RimWorld processes using this disposable profile."""
+    listing = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True, check=True).stdout
+    marker = "-savedatafolder=" + str(profile)
+    return [int(line.split(None, 1)[0]) for line in listing.splitlines()
+            if "RimWorld by Ludeon Studios" in line and marker in line]
+
+
+def api(base, path, post=False, timeout=10):
+    request = urllib.request.Request(base + path, data=b"{}" if post else None, method="POST" if post else "GET",
+                                     headers={"Content-Type": "application/json"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def api_up(base):
+    try:
+        api(base, "/api/v1/game/state", timeout=3)
+        return True
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def map_loaded(base):
+    try:
+        maps = api(base, "/api/v1/maps", timeout=5)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    # RIMAPI answers {"success": ..., "data": [...]}; an error reply is not a loaded map.
+    return isinstance(maps, dict) and maps.get("success") is True and bool(maps.get("data"))
+
+
+def stop(process):
+    for _ in range(6):
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+    if process.poll() is None:
+        process.kill()
+        process.wait(timeout=30)
+
+
+def create_baseline(values, timeout, log=print):
+    """Launch the disposable profile into a quick-test colony, save it as the baseline and stop the game."""
+    profile = Path(values["RW_PROFILE_DIR"])
+    save = Path(values["RW_BASELINE_SAVE"])
+    base = values["RW_RIMAPI_BASE"]
+    if running(profile):
+        raise ValueError("The disposable profile is already running; stop it before creating the baseline save")
+    if api_up(base):
+        raise ValueError("Another game already answers on " + base + "; close it so the save cannot reach the wrong game")
+    autostart = profile / "Saves/autostart.rws"
+    if autostart.exists():
+        autostart.unlink()  # A disposable copy; -quicktest only starts a new colony without it.
+    log_file = Path(values["RW_LOG_FILE"])
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    command = [str(Path(values["RW_RIMWORLD_APP"]) / EXECUTABLE), "-savedatafolder=" + str(profile),
+               "-logFile", str(log_file), "-quicktest"]
+    log("Launching RimWorld into a quick-test colony to create " + save.name + " (a few minutes)...")
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        deadline = time.monotonic() + timeout
+        while not map_loaded(base):
+            if process.poll() is not None:
+                raise ValueError("RimWorld exited with code " + str(process.returncode) + " before the colony loaded; see " + str(log_file))
+            if time.monotonic() > deadline:
+                raise ValueError("No colony loaded within " + str(timeout) + " s; see " + str(log_file))
+            time.sleep(5)
+        result = api(base, SAVE_ROUTE + urllib.parse.quote(save.stem), post=True, timeout=300)
+        if not result.get("success"):
+            raise ValueError("Saving failed: " + str(result.get("error", result)) +
+                             " (the save endpoint needs RIMAPI Debug Actions 0.1.2 or later)")
+        if not save.is_file() or not same_place(result.get("path", ""), save):
+            raise ValueError("The game reported " + str(result.get("path")) + " but " + str(save) + " was not written")
+        log("Saved " + save.name + " (" + str(save.stat().st_size) + " bytes) at tick " + str(result.get("tick")))
+    finally:
+        stop(process)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--repo-root", type=Path)
-    parser.add_argument("--apply", action="store_true", help="create the profile, download and link mods")
+    parser.add_argument("--apply", action="store_true",
+                        help="create the profile, download and link mods, then create a missing baseline save")
+    parser.add_argument("--timeout", type=int, default=900, help="seconds to wait for the quick-test colony")
     args = parser.parse_args(argv)
     try:
         root = Path(args.repo_root or subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()).resolve()
@@ -278,12 +371,15 @@ def main(argv=None):
             for action in actions:
                 action()
             report, _ = plan(root, values, config)
+        if args.apply and [i for s, i, _ in report.lines if s != "ok" and s != "warn"] == ["baseline save"]:
+            create_baseline(values, args.timeout)
+            report, _ = plan(root, values, config)
         report.print()
         if not args.apply and any(s == "todo" for s, _, _ in report.lines):
             print("\nRun again with --apply to make these changes.")
         return 0 if report.ready else 1
     except (OSError, ValueError, KeyError, TypeError, ET.ParseError, zipfile.BadZipFile,
-            subprocess.CalledProcessError) as error:
+            subprocess.CalledProcessError, urllib.error.URLError) as error:
         print("Setup error: " + str(error), file=sys.stderr)
         return 1
 

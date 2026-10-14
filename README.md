@@ -25,8 +25,9 @@ building, installing, or editing anything.
 `scripts/setup-dev.py` prepares the disposable live-test environment that
 `run-rimworld-dev` uses. It reports by default and changes things only with
 `--apply`: the `.runtime/` profile and its `ModsConfig.xml`, `dev-<packageId>`
-links in the game's `Mods/` folder, and GitHub-release test mods downloaded into
-`.runtime/mods`. A consumer names where each non-official baseline mod comes from:
+links in the game's `Mods/` folder, GitHub-release test mods downloaded into
+`.runtime/mods`, and finally the baseline save, created by launching the profile
+with `-quicktest` and saving through RIMAPI Debug Actions. A consumer names where each non-official baseline mod comes from:
 
 ```json
 "mod_sources": {
