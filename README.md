@@ -32,7 +32,7 @@ with `-quicktest` and saving through RIMAPI Debug Actions. A consumer names wher
 ```json
 "mod_sources": {
   "brrainz.harmony": {"workshop": "2009463077"},
-  "roman.rimapi.debugactions": {"github_release": "RimWorld-mods-patches/rimapi-debug-actions"}
+  "romangr.rimapi.debugactions": {"github_release": "RimWorld-mods-patches/rimapi-debug-actions"}
 }
 ```
 
